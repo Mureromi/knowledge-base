@@ -15,6 +15,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import ArqDep, CurrentUser, DBSession
+from app.clients.embedding import embed_documents_if_ready
 from app.core.config import settings
 from app.core.exceptions import BizError
 from app.crud import document as doc_crud
@@ -106,14 +107,18 @@ async def upload_document(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={"code": 42202, "message": "文件内容为空", "detail": None},
             )
+        drafts = split_text(text)
+        # 阶段 4：txt/md 快路径入库时也顺带写向量（模型未就绪则 None，仍走关键词）。
+        embeddings = await embed_documents_if_ready([d.content for d in drafts])
         doc, chunk_count = await doc_crud.create_with_chunks(
             db,
             owner_id=current_user.id,
             title=title,
             source_type=source_type,
             raw_text=text,
-            drafts=split_text(text),
+            drafts=drafts,
             raw_content=raw if settings.store_raw_upload else None,
+            embeddings=embeddings,
         )
         return _to_out(doc, chunk_count)
 

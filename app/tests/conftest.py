@@ -11,16 +11,53 @@ import fakeredis.aioredis
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import JSON
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.api.v1.deps import get_stream_session_factory
 from app.clients.cache import CacheBackend, RedisCache, get_cache
+from app.clients.embedding import get_embedding
 from app.clients.llm import LLMResult, StreamChunk, get_llm
 from app.clients.queue import get_arq
+from app.clients.rerank import get_reranker
+from app.core.config import settings
 from app.db.session import get_db
 from app.main import app
 from app.models.base import Base
+
+
+def _make_vector_sqlite_compatible() -> None:
+    """把 Vector 列在测试用的 SQLite 上降级为 JSON 存储。
+
+    ★ 这是刻意的类型适配，不是 hack（docs/项目实现文档-阶段4.md §9.1）：
+      Vector(512) 是 PostgreSQL 专属类型，SQLite 不认识，直接 create_all 会报
+      "CompileError: can't render element of type VECTOR"——不加这一步，133 个存量测试
+      会在 create_all 阶段全崩。
+      测试关注的是**检索逻辑**（RRF 融合、降级、状态过滤），不是 pgvector 本身；
+      向量距离排序由 retrieval._vector_candidates 里的应用层余弦分支走（§9.1“应用层排序”）。
+      ★ none_as_null=True：Python None → SQL NULL（而 JSON 默认会把 None 存成 JSON 'null'），
+        否则回填脚本的 `WHERE embedding IS NULL` 选不中未回填的行。
+    """
+    from app.models.chunk import Chunk
+
+    Chunk.__table__.c.embedding.type = JSON(none_as_null=True)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_query_rewrite():
+    """阶段 4：查询改写默认关闭，隔离其余测试。
+
+    ★ 为什么：rewrite_query 会（a）多调一次 LLM、（b）把改写句拿去检索，
+      两件事都会让阶段 2/3 的会话/缓存测试误红（那些测试假定一轮只调一次 LLM）。
+      改写本身由 test_query_rewrite.py 直接调用 逐例验证，在那个测试里会显式打开。
+    """
+    original = settings.query_rewrite_enabled
+    settings.query_rewrite_enabled = False
+    try:
+        yield
+    finally:
+        settings.query_rewrite_enabled = original
 
 
 def parse_sse(text: str) -> list[tuple[str, dict]]:
@@ -107,6 +144,7 @@ async def fake_redis():
 @pytest_asyncio.fixture
 async def test_engine():
     """内存 SQLite + StaticPool：同一连接，跨 session 可见。"""
+    _make_vector_sqlite_compatible()      # ★ 必须在 create_all 之前（§9.1）
     engine = create_async_engine(
         "sqlite+aiosqlite://",
         connect_args={"check_same_thread": False},
@@ -123,6 +161,49 @@ async def test_engine():
 @pytest_asyncio.fixture
 def session_factory(test_engine):
     return async_sessionmaker(test_engine, expire_on_commit=False, autoflush=False)
+
+
+@pytest_asyncio.fixture
+async def db_session(session_factory):
+    """直接给测试一个可用的 AsyncSession（不走 HTTP 端点）。"""
+    async with session_factory() as s:
+        yield s
+
+
+@pytest_asyncio.fixture
+def seed_document(db_session):
+    """测试库直接建文档 + 切片（可指定 status 与每片向量），绕过上传链路。
+
+    chunks 为 [(content, embedding 或 None), ...]。SQLite 不强制外键，owner_id 可直给。
+    """
+    from app.models.chunk import Chunk
+    from app.models.document import Document
+
+    async def _seed(
+        *,
+        owner_id: int = 1,
+        status: str = "ready",
+        title: str = "测试文档",
+        chunks: list[tuple[str, list[float] | None]],
+    ) -> tuple[Document, list[Chunk]]:
+        doc = Document(
+            owner_id=owner_id, title=title, source_type="txt",
+            raw_text="x", status=status,
+        )
+        db_session.add(doc)
+        await db_session.flush()
+        objs: list[Chunk] = []
+        for i, (content, emb) in enumerate(chunks):
+            c = Chunk(
+                document_id=doc.id, owner_id=owner_id, seq=i,
+                content=content, char_count=len(content), embedding=emb,
+            )
+            db_session.add(c)
+            objs.append(c)
+        await db_session.flush()
+        return doc, objs
+
+    return _seed
 
 
 @pytest_asyncio.fixture
@@ -155,12 +236,71 @@ async def fake_arq() -> FakeArqPool:
     return FakeArqPool()
 
 
+class FakeEmbedder:
+    """可编程假 embedder：按文本返回预设向量，便于精确控制召回顺序（§9.3）。
+
+    ★ 默认返回全零向量——此时向量排序是任意的（§9.4），写断言时要么给不同向量，
+      要么断言“顺序稳定”而非“顺序正确”。
+    """
+
+    def __init__(self, vectors: dict[str, list[float]] | None = None, dim: int = 512):
+        self.vectors = vectors or {}
+        self.dim = dim
+        self.query_calls: list[str] = []
+        self.doc_calls: list[list[str]] = []
+        self.is_ready = True
+
+    async def embed_query(self, text: str) -> list[float]:
+        self.query_calls.append(text)
+        return self.vectors.get(text, [0.0] * self.dim)
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.doc_calls.append(list(texts))
+        return [self.vectors.get(t, [0.0] * self.dim) for t in texts]
+
+
+class FakeReranker:
+    """可编程假 reranker：按 (query, doc) 返回预设分数（§9.3）。
+
+    raises=True 时模拟精排报错，验证检索层“降级为 RRF 顺序”（§9.2）。
+    """
+
+    def __init__(
+        self,
+        scores: dict[tuple[str, str], float] | None = None,
+        *,
+        raises: bool = False,
+    ):
+        self.scores = scores or {}
+        self.raises = raises
+        self.calls: list[tuple[str, list[str]]] = []
+        self.is_ready = True
+
+    async def rerank(self, query: str, documents: list[str]) -> list[float]:
+        if self.raises:
+            raise RuntimeError("假 reranker 模拟精排失败")
+        self.calls.append((query, documents))
+        return [self.scores.get((query, d), 0.0) for d in documents]
+
+
+@pytest_asyncio.fixture
+async def fake_embedder() -> FakeEmbedder:
+    return FakeEmbedder()
+
+
+@pytest_asyncio.fixture
+async def fake_reranker() -> FakeReranker:
+    return FakeReranker()
+
+
 @pytest_asyncio.fixture
 async def client(
     fake_llm: FakeLLM,
     session_factory,
     cache_backend: CacheBackend,
     fake_arq: FakeArqPool,
+    fake_embedder: FakeEmbedder,
+    fake_reranker: FakeReranker,
 ):
     async def override_db():
         async with session_factory() as s:
@@ -180,6 +320,10 @@ async def client(
     # ★ 阶段 3：ARQ 依赖也必须覆盖，否则测试会去连真实 Redis 并抛
     #   "ARQ 队列未初始化"（测试不走 lifespan）
     app.dependency_overrides[get_arq] = lambda: fake_arq
+    # ★ 阶段 4：embedding / rerank 依赖必须覆盖为假实现，否则 chat 端点会拿到
+    #   未加载的全局客户端（_model=None）而报错。测试环境不走 lifespan。
+    app.dependency_overrides[get_embedding] = lambda: fake_embedder
+    app.dependency_overrides[get_reranker] = lambda: fake_reranker
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
         yield ac

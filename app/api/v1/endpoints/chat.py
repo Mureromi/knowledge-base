@@ -30,7 +30,9 @@ from app.api.v1.deps import (
     CacheDep,
     CurrentUser,
     DBSession,
+    EmbedderDep,
     LLMDep,
+    RerankerDep,
     StreamSessionFactoryDep,
 )
 from app.core.config import settings
@@ -71,6 +73,8 @@ async def _chat_event_source(
     question: str,
     session_id: int,
     top_k: int | None,
+    embedder,
+    reranker,
 ) -> AsyncIterator[str]:
     try:
         async for event, data in qa_service.run_answer_stream(
@@ -81,6 +85,8 @@ async def _chat_event_source(
             question=question,
             session_id=session_id,
             top_k=top_k,
+            embedder=embedder,
+            reranker=reranker,
         ):
             yield sse_event(event, data)
     except HTTPException as exc:
@@ -109,6 +115,8 @@ async def chat_stream_endpoint(
     llm: LLMDep,
     cache: CacheDep,
     session_factory: StreamSessionFactoryDep,
+    embedder: EmbedderDep,
+    reranker: RerankerDep,
 ) -> StreamingResponse:
     # L1 频率：最早拦，最省资源（连检索都不做）
     await check_rate_limit(cache, current_user.id)
@@ -138,6 +146,8 @@ async def chat_stream_endpoint(
             question=payload.question,
             session_id=payload.session_id,
             top_k=payload.top_k,
+            embedder=embedder,
+            reranker=reranker,
         ),
         media_type="text/event-stream",
         headers={
@@ -156,6 +166,8 @@ async def chat_sync(
     db: DBSession,
     llm: LLMDep,
     cache: CacheDep,
+    embedder: EmbedderDep,
+    reranker: RerankerDep,
 ) -> ChatResponse:
     """脚本 / 自动化 / 未来 Java 端用。业务逻辑与流式共用 qa.run_answer。"""
     await check_rate_limit(cache, current_user.id)
@@ -168,6 +180,8 @@ async def chat_sync(
         question=payload.question,
         session_id=payload.session_id,
         top_k=payload.top_k,
+        embedder=embedder,
+        reranker=reranker,
     )
 
     return ChatResponse(
@@ -179,6 +193,8 @@ async def chat_sync(
                 chunk_id=c.chunk_id,
                 seq=c.seq,
                 score=c.score,
+                keyword_rank=c.keyword_rank,
+                vector_rank=c.vector_rank,
             )
             for c in result.citations
         ],

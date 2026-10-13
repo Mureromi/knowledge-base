@@ -7,8 +7,10 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.clients.cache import CacheBackend, get_cache
+from app.clients.embedding import EmbeddingClient, get_embedding
 from app.clients.llm import LLMClient, get_llm
 from app.clients.queue import get_arq
+from app.clients.rerank import RerankClient, get_reranker
 from app.core.security import decode_access_token
 from app.crud import user as user_crud
 from app.db.session import SessionLocal, get_db
@@ -49,6 +51,9 @@ LLMDep = Annotated[LLMClient, Depends(get_llm)]
 CacheDep = Annotated[CacheBackend, Depends(get_cache)]
 # 阶段 3：ARQ 队列依赖（上传端点投递任务用）
 ArqDep = Annotated[object, Depends(get_arq)]
+# 阶段 4：向量 / 精排依赖（检索层注入；测试用 dependency_overrides 换假实现）
+EmbedderDep = Annotated[EmbeddingClient, Depends(get_embedding)]
+RerankerDep = Annotated[RerankClient, Depends(get_reranker)]
 
 
 def get_stream_session_factory() -> "async_sessionmaker[AsyncSession]":

@@ -19,8 +19,12 @@ async def create_with_chunks(
     raw_text: str,
     drafts: list[ChunkDraft],
     raw_content: bytes | None = None,
+    embeddings: list[list[float]] | None = None,
 ) -> tuple[Document, int]:
-    """一次事务写入文档 + 切片（txt/md 快路径用）。返回 (document, chunk_count)。"""
+    """一次事务写入文档 + 切片（txt/md 快路径用）。返回 (document, chunk_count)。
+
+    embeddings 与 drafts 对齐（阶段 4）：传入则新切片入库即带向量，为 None / 长度不够时该行留空。
+    """
     doc = Document(
         owner_id=owner_id,
         title=title,
@@ -40,8 +44,11 @@ async def create_with_chunks(
             seq=d.seq,
             content=d.content,
             char_count=len(d.content),
+            embedding=(
+                embeddings[i] if embeddings is not None and i < len(embeddings) else None
+            ),
         )
-        for d in drafts
+        for i, d in enumerate(drafts)
     ]
     for c in chunks:
         db.add(c)
@@ -95,10 +102,12 @@ async def replace_chunks(
     owner_id: int,
     raw_text: str,
     drafts: list[ChunkDraft],
+    embeddings: list[list[float]] | None = None,
 ) -> int:
     """先删后写切片（§6.3 ③）。重试场景上次可能写了半截，必须清理避免重复切片。
 
     同时回填 raw_text。返回新写入的切片数。
+    embeddings 与 drafts 对齐（阶段 4）：worker 入库时顺带写向量，缺则留空。
     """
     await db.execute(delete(Chunk).where(Chunk.document_id == document_id))
     await db.execute(
@@ -111,8 +120,11 @@ async def replace_chunks(
             seq=d.seq,
             content=d.content,
             char_count=len(d.content),
+            embedding=(
+                embeddings[i] if embeddings is not None and i < len(embeddings) else None
+            ),
         )
-        for d in drafts
+        for i, d in enumerate(drafts)
     ]
     db.add_all(chunks)
     await db.flush()

@@ -41,7 +41,7 @@ app/
 
 ---
 
-## 快速跑起来
+## run
 
 ```bash
 cd "/Users/mureromi/Documents/FastAPI Learning/knowledge-base"
@@ -88,7 +88,7 @@ cp .env.example .env
 
 ---
 
-## 踩过的坑（写下来，面试时会用到）
+## 踩过的坑
 
 ### 1. `passlib` 与 `bcrypt 5.x` 不兼容（§1.2）
 网上几乎所有 FastAPI 认证教程都写 `pip install "passlib[bcrypt]"`，但在 Python 3.14 + bcrypt 5.0 环境下会炸：

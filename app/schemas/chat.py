@@ -20,7 +20,11 @@ class Citation(BaseModel):
     document_title: str
     chunk_id: int
     seq: int
+    # 阶段 4：score 语义变了——不再是“命中关键词个数”，而是 RRF 分或 rerank 分（浮点，跨模式不可比）
     score: float
+    # 阶段 4 新增：便于排查召回来源（命中缓存重建时为 None）
+    keyword_rank: int | None = None
+    vector_rank: int | None = None
 
 
 class Usage(BaseModel):
@@ -38,8 +42,9 @@ class ChatResponse(BaseModel):
     answer: str
     citations: list[Citation]
     usage: Usage
-    # 阶段 0 恒为 "keyword"；阶段 4 升级为 "hybrid"，让新旧效果可在响应里对比
-    retrieval_mode: str = "keyword"
+    # 阶段 0 恒为 "keyword"；阶段 4 升级为 "hybrid"（rerank 开启时 "hybrid+rerank"），
+    # 让新旧效果可在同一接口响应里对比（端点会显式传入，默认仅为兜底）
+    retrieval_mode: str = "hybrid"
     # 阶段 2：本轮所属会话（后续请求带上它即可续聊）
     session_id: int
 

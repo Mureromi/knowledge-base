@@ -22,6 +22,7 @@ from arq import cron
 from arq.connections import RedisSettings
 
 from app.clients.cache import shutdown_cache, startup_cache
+from app.clients.embedding import embed_documents_if_ready, embedding_client
 from app.core.config import settings
 from app.crud import document as doc_crud
 from app.crud import processing_task as task_crud
@@ -127,6 +128,9 @@ async def process_document(ctx: dict[str, Any], task_id: int) -> str:
         task = await task_crud.get(db, task_id)
         if task is None:
             return "task-not-found"
+        # 阶段 4：入库时顺带向量化（新增切片不该依赖回填脚本，§5.3）。
+        # 模型未就绪时返回 None → 该批切片无向量，仍能被关键词召回（渐进降级）。
+        embeddings = await embed_documents_if_ready([d.content for d in drafts])
         # 先删后写：重试可能已写了半截切片，replace 保证不产生重复切片
         await doc_crud.replace_chunks(
             db,
@@ -134,6 +138,7 @@ async def process_document(ctx: dict[str, Any], task_id: int) -> str:
             owner_id=owner_id,
             raw_text=text,
             drafts=drafts,
+            embeddings=embeddings,
         )
         await doc_crud.set_status(db, document_id, "ready")
         await task_crud.mark_succeeded(
@@ -189,6 +194,13 @@ async def cleanup_stale_tasks(ctx: dict[str, Any]) -> int:
 async def startup(ctx: dict[str, Any]) -> None:
     await init_models()          # 开发期方便；生产应改为 alembic upgrade
     await startup_cache()        # worker 侧若将来要写缓存也需要它
+    # ★ 阶段 4：worker 只需 embedder（把切片向量化入库），不需要 reranker（那是查询时的事）。
+    #   startup() 同步且会加载模型（首次含下载）；失败不阻断入库——embedding 写不进去时仍走关键词。
+    if settings.embedding_enabled:
+        try:
+            embedding_client.startup()
+        except Exception as exc:                        # noqa: BLE001
+            logger.warning("worker embedding 模型加载失败（新切片将无向量，仅靠关键词）: %s", exc)
     ctx["started_at"] = datetime.now(UTC)
     logger.info("worker 已启动")
 

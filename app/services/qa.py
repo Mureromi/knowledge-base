@@ -18,7 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.clients.cache import CacheBackend
+from app.clients.embedding import EmbeddingClient
 from app.clients.llm import LLMClient, LLMError, LLMResult
+from app.clients.rerank import RerankClient
 from app.core.config import settings
 from app.models.chat_log import ChatLog
 from app.models.chat_session import ChatSession
@@ -29,7 +31,8 @@ from app.services.ratelimit import (
     check_daily_quota,
     distributed_llm_slot,
 )
-from app.services.retrieval import RetrievedChunk, search
+from app.services.query_rewrite import rewrite_query
+from app.services.retrieval import RetrievedChunk, resolve_retrieval_mode, search
 from app.services.session import (
     append_turn,
     get_or_create_session,
@@ -132,14 +135,14 @@ async def _hydrate_citations(
     return result
 
 
-def _no_result_usage() -> dict[str, Any]:
+def _no_result_usage(retrieval_mode: str = "keyword") -> dict[str, Any]:
     return {
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "cost_yuan": 0.0,
         "latency_ms": 0,
         "cache_hit": False,
-        "retrieval_mode": "keyword",
+        "retrieval_mode": retrieval_mode,
     }
 
 
@@ -170,7 +173,7 @@ async def _lookup_cache(
     return cache_key, cached, citations
 
 
-def _hit_usage(cached: dict[str, Any]) -> dict[str, Any]:
+def _hit_usage(cached: dict[str, Any], retrieval_mode: str = "keyword") -> dict[str, Any]:
     return {
         "prompt_tokens": 0,
         "completion_tokens": 0,
@@ -178,7 +181,7 @@ def _hit_usage(cached: dict[str, Any]) -> dict[str, Any]:
         "latency_ms": 0,
         "cache_hit": True,
         "saved_cost_yuan": float(cached.get("cost_yuan", 0.0) or 0.0),
-        "retrieval_mode": "keyword",
+        "retrieval_mode": retrieval_mode,
     }
 
 
@@ -282,6 +285,8 @@ async def run_answer(
     question: str,
     session_id: int | None,
     top_k: int | None = None,
+    embedder: EmbeddingClient | None = None,
+    reranker: RerankClient | None = None,
 ) -> AnswerResult:
     """非流式完整问答。逻辑与阶段 1 相同，只是加了会话历史与溯源。"""
     session = await get_or_create_session(
@@ -290,9 +295,20 @@ async def run_answer(
     # ★ 顺序关键（§3.2）：先读窗口（此时不含本轮），再算键
     window = await load_window_messages(db, session_id=session.id)
 
-    chunks = await search(db, owner_id=owner_id, question=question, top_k=top_k)
+    # ★ 阶段 4：多轮追问先改写成自包含检索句（首轮 window 空 → 直接用原问题）。
+    #   resolved 只用于检索；发给 LLM 的仍是原始 question（§4.3，别写反）。
+    resolved = await rewrite_query(
+        db, llm, cache,
+        owner_id=owner_id, session_id=session.id,
+        question=question, window=window,
+    )
+    mode = resolve_retrieval_mode(embedder, reranker)
+    chunks = await search(
+        db, owner_id=owner_id, question=resolved, top_k=top_k,
+        embedder=embedder, reranker=reranker,
+    )
     if not chunks:
-        return AnswerResult(NO_RESULT_ANSWER, [], _no_result_usage(), session.id)
+        return AnswerResult(NO_RESULT_ANSWER, [], _no_result_usage(mode), session.id)
 
     cache_key, cached, citations = await _lookup_cache(
         db,
@@ -312,7 +328,7 @@ async def run_answer(
             citations=citations,
         )
         return AnswerResult(
-            cached.get("answer", ""), citations, _hit_usage(cached), session.id
+            cached.get("answer", ""), citations, _hit_usage(cached, mode), session.id
         )
 
     # ---------- 未命中：扣 L3 配额 → 分布式并发槽位 → 调 LLM ----------
@@ -369,7 +385,7 @@ async def run_answer(
             "cost_yuan": result.cost_yuan,
             "latency_ms": result.latency_ms,
             "cache_hit": False,
-            "retrieval_mode": "keyword",
+            "retrieval_mode": mode,
         },
         session.id,
     )
@@ -403,6 +419,8 @@ async def run_answer_stream(
     question: str,
     session_id: int | None,
     top_k: int | None = None,
+    embedder: EmbeddingClient | None = None,
+    reranker: RerankClient | None = None,
 ) -> AsyncIterator[tuple[str, dict]]:
     """流式问答，产出 (事件名, 数据) 序列，由端点转成 SSE。
 
@@ -416,14 +434,22 @@ async def run_answer_stream(
             )
             window = await load_window_messages(db, session_id=session.id)
 
+            # ★ 阶段 4：同非流式——先改写检索句，发给 LLM 仍是原问题。
+            resolved = await rewrite_query(
+                db, llm, cache,
+                owner_id=owner_id, session_id=session.id,
+                question=question, window=window,
+            )
+            mode = resolve_retrieval_mode(embedder, reranker)
             chunks = await search(
-                db, owner_id=owner_id, question=question, top_k=top_k
+                db, owner_id=owner_id, question=resolved, top_k=top_k,
+                embedder=embedder, reranker=reranker,
             )
             if not chunks:
                 yield ("meta", {"session_id": session.id, "cache_hit": False})
                 yield ("delta", {"text": NO_RESULT_ANSWER})
                 yield ("citations", {"citations": []})
-                yield ("done", {"usage": _no_result_usage()})
+                yield ("done", {"usage": _no_result_usage(mode)})
                 await db.commit()
                 return
 
@@ -446,7 +472,7 @@ async def run_answer_stream(
                     "citations",
                     {"citations": [_citation_dict(c) for c in citations]},
                 )
-                usage = _hit_usage(cached)
+                usage = _hit_usage(cached, mode)
                 yield ("done", {"usage": usage, "saved_cost_yuan": usage["saved_cost_yuan"]})
                 await _persist_hit(
                     db,
@@ -548,7 +574,7 @@ async def run_answer_stream(
                         "cost_yuan": result.cost_yuan,
                         "latency_ms": result.latency_ms,
                         "cache_hit": False,
-                        "retrieval_mode": "keyword",
+                        "retrieval_mode": mode,
                     }
                 },
             )
@@ -573,4 +599,7 @@ def _citation_dict(c: RetrievedChunk) -> dict:
         "chunk_id": c.chunk_id,
         "seq": c.seq,
         "score": c.score,
+        # 阶段 4：排查“这条是靠关键词还是向量召回的”（命中缓存重建时为 None）
+        "keyword_rank": c.keyword_rank,
+        "vector_rank": c.vector_rank,
     }

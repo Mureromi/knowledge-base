@@ -25,6 +25,8 @@ dependencies = [
     "arq>=0.28",                # Redis 后端的异步任务队列
     "pypdf>=6.20",              # PDF 文字层提取（纯 Python，中文实测正确）
     "python-docx>=1.1",         # .docx 段落 + 表格提取
+    "pgvector>=0.5.1",
+    "fastembed>=0.9",
 ]
 
 [dependency-groups]

@@ -96,5 +96,34 @@ class Settings(BaseSettings):
     worker_max_tries: int = 3       # 仅“可重试异常”会走到这里（§6.3 ②）
     task_stale_seconds: int = 600   # 卡在 running 超过此时长 → 视为僵死，由 cron 重置重投
 
+    # ---- 阶段 4：向量检索 + 混合检索 + rerank + 多轮查询改写 ----
+    # （docs/项目实现文档-阶段4.md §2.2）
+    # Embedding（本地 fastembed，零成本零 API key）
+    embedding_enabled: bool = True
+    embedding_model: str = "BAAI/bge-small-zh-v1.5"
+    embedding_dim: int = 512                    # ★ 必须与模型一致，写错只会在查询时报错、难排查
+    embedding_cache_dir: str = ".model_cache"   # ★ 必须持久化，别用系统临时目录（重启即失）
+    embedding_batch_size: int = 32
+    # ★ 只加在 query 上，文档侧不加（实测区分度 +0.044 → +0.072）
+    embedding_query_prefix: str = "为这个句子生成表示以用于检索相关文章："
+
+    # 向量检索（混合召回）
+    vector_top_k: int = 20          # 向量召回候选数（给融合用，不等于最终上下文条数）
+    keyword_top_k: int = 20         # 关键词召回候选数
+    rrf_k: int = 60                 # RRF 平滑常数（论文推荐 60）
+    final_top_k: int = 5            # 融合+重排后真正进上下文的条数
+
+    # Rerank（本地 bge-reranker-base，约 1GB 内存代价）
+    # ★ 可一键对比开关。§1.1 实测：小语料下 rerank 几乎没有提升，故默认可关。
+    rerank_enabled: bool = True
+    rerank_model: str = "BAAI/bge-reranker-base"
+    rerank_top_k: int = 10          # 只对前 N 个候选重排（控制延迟）
+    rerank_min_candidates: int = 2  # 候选少于这个数就跳过重排（省时间）
+
+    # 多轮查询改写（把「那退货呢？」改写成自包含检索句）
+    query_rewrite_enabled: bool = True
+    query_rewrite_max_history_turns: int = 3   # 改写时参考的历史轮数（比检索窗口小，够用即可）
+    query_rewrite_cache_ttl: int = 3600        # 改写结果缓存 1 小时（同一问题不重复改写）
+
 
 settings = Settings()
