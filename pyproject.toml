@@ -1,0 +1,51 @@
+[project]
+name = "knowledge-base"
+version = "0.1.0"
+description = "个人知识库 AI 问答系统（RAG）：阶段 0-3 已完成"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi[standard]>=0.143",
+    "uvicorn>=0.54.0",
+    # ---- 知识库项目（app）阶段 0 依赖，见 docs/项目实现文档-阶段0.md §1.4 ----
+    "sqlalchemy[asyncio]>=2.1",
+    "asyncpg>=0.32",
+    "aiosqlite>=0.22",          # 本地轻量备选（tests / 无 Docker 时使用）
+    "alembic>=1.13",
+    "pydantic-settings>=2.15",
+    "pyjwt>=2.15",              # 不用 python-jose
+    "bcrypt>=5.0",              # 不用 passlib（§1.2 已实测不兼容）
+    "python-multipart>=0.0.9",  # 文件上传
+    "httpx>=0.28",              # 调 LLM
+    "tiktoken>=0.14",           # token 计数与成本预估
+    "redis>=5.0.1,<6",          # 阶段 1：答案缓存 + 分布式限流（★上限 <6 是被 arq 0.28 锁死的，见下方注释）
+    # ---- 阶段 3：异步任务 + 文档解析（docs/项目实现文档-阶段3.md §8.1）----
+    # ★ arq 0.28（当前最新版）硬依赖 redis-py >=4.2,<6，故上面把 redis 从 8.x 降到 5.x。
+    #   文档基线里的 "Redis 8.10.2" 指 **Redis 服务器**版本，与 python redis 包无关。
+    #   阶段 1 用到的 from_url/get/set(ex)/delete/aclose/eval/incr/expire 在 redis-py 5.x 均存在。
+    "arq>=0.28",                # Redis 后端的异步任务队列
+    "pypdf>=6.20",              # PDF 文字层提取（纯 Python，中文实测正确）
+    "python-docx>=1.1",         # .docx 段落 + 表格提取
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "respx>=0.21",
+    "fakeredis[lua]>=2.39",     # 阶段 1：测试不需要真 Redis（lua extra 必需）
+    "reportlab>=4.0",           # 阶段 3：测试里现场生成 PDF（含中文字体），不提交二进制
+    "ruff",
+    "mypy",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["app/tests"]
+addopts = "-m 'not real'"
+markers = [
+    "real: 需要真实 LLM API Key 的冒烟测试，默认不进 CI",
+]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

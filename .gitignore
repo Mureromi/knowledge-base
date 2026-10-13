@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 虚拟环境与 uv 缓存
+.venv/
+.uv-cache/
+
+# 环境变量与本地数据库（切勿提交）
+.env
+.env.local
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.idea/
+.vscode/
+
+# 系统
+.DS_Store
+
+# PostgreSQL 本地日志（数据目录在 /opt/homebrew，不入库）
+.pg/
+# Embedding 模型缓存（约 200MB，见 docs/阶段4前置-Embedding选型验证.md）
+.model_cache/
+
+# 数据库迁移备份（阶段 3 迁移前的 SQLite 快照）
+*.bak
+# SQLite 遗留（已迁到 PostgreSQL）
+kb.db
