@@ -50,7 +50,7 @@ jq -c 'select(.level=="ERROR" or .level=="WARNING")' app.log
 | **4** | [项目实现文档-阶段4.md](docs/项目实现文档-阶段4.md) | ✅ 已完成：向量 + 混合检索 + RRF + rerank + 查询改写 |
 | **4** | [阶段4-验收报告.md](docs/阶段4-验收报告.md) | ✅ 已验收（13/13 通过；发现并修复 4 个问题） |
 | 前置 | [阶段4前置-Embedding选型验证.md](docs/阶段4前置-Embedding选型验证.md) | ✅ 方案已定并实测 |
-| **5** | [项目实现文档-阶段5.md](docs/项目实现文档-阶段5.md) | 📝 **文档已定稿**：Agent / 工具调用（原生 Function Calling 自写循环） |
+| **5** | [项目实现文档-阶段5.md](docs/项目实现文档-阶段5.md) | ✅ 已完成：Agent / 工具调用（原生 Function Calling 自写循环，工具选择准确率 1.0） |
 | **6** | [项目实现文档-阶段6.md](docs/项目实现文档-阶段6.md) | ✅ 已完成：评估体系（自写 judge + 规则指标）+ Langfuse 可观测（基线表见下） |
 | 环境 | [PostgreSQL-本地环境.md](docs/PostgreSQL-本地环境.md) | ✅ PG 16.15 + pgvector 0.8.7 |
 
@@ -69,9 +69,10 @@ app/
 ├── models/                 # User / Document / Chunk / ChatLog / ChatSession / ChatMessage
 ├── schemas/                # Pydantic 请求响应（含会话 CRUD）
 ├── crud/                   # 纯数据访问
-├── services/               # ingest / retrieval / qa(流式+非流式) / session / cache_key(v2) / ratelimit
-├── api/v1/                 # 路由：auth / documents / chat（SSE + sync + sessions CRUD）+ deps
-└── tests/                  # 94 个用例（LLM + Redis 全 mock，断网也全绿）
+├── services/               # ingest / retrieval / qa(流式+非流式) / session / cache_key(v2) / ratelimit / agent(阶段5)
+├── tools/                  # 阶段 5：base / calc / now / search_kb（Function Calling）
+├── api/v1/                 # 路由：auth / documents / chat（SSE + sync + sessions CRUD + agent）+ deps
+└── tests/                  # 260 个用例（LLM + Redis 全 mock，断网也全绿）
 
 仓库根还有 migrations/ + alembic.ini   # 阶段 2 引入：建表已交给 alembic
 ```
@@ -367,9 +368,63 @@ DeepSeek 流式的 token 统计在尾 chunk，`_parse({"usage":..., "choices":[]
 
 ---
 
+## 阶段 5 落地：Agent / 工具调用
+
+对应 [docs/项目实现文档-阶段5.md](docs/项目实现文档-阶段5.md)。决策：**原生 Function Calling + 自写循环（约 150 行）**，不引 LangChain / AutoGen。★ 本阶段是**增量非替换**——快速路径 `/chat` 一行不动，新增 `/chat/agent`，用 `chat_logs.is_agent` 统计两条路径。
+
+### 新增文件
+
+```
+tools/base.py               # ToolResult + Tool 协议（runtime_checkable）+ openai_schema()
+tools/calc.py               # ast 白名单安全求值（绝不用 eval）
+tools/now.py                # 当前时间（回答"今天/三天后"这类相对时间）
+tools/search_kb.py          # 复用 retrieval.search，按 owner_id 隔离
+tools/__init__.py           # build_tools()：search_kb / calc / now
+services/agent.py           # AgentRunner：多轮 tool_calls 循环 + 四层保护 + 兜底作答
+scripts/eval_agent.py       # 用阶段 6 评测体系量 Agent（工具选择准确率等 4 指标）
+app/evals/{agent_cases.yaml,metrics_agent.py}   # 5 例计算/相对时间/多跳 + 纯函数指标
+```
+
+首批 3 工具，价值落在快速路径量不到的三类：**计算**（折扣/会员省多少）、**相对时间**（今天/三天后）、**多跳**（先检索政策再算钱）。
+
+### 四层保护（`agent.py`，任一触发即停并兜底作答）
+
+| 保护 | 配置项 | 语义 |
+| --- | --- | --- |
+| 最大轮次 | `AGENT_MAX_STEPS=6` | 用尽则 `stopped_reason=max_steps`，追加一次无 tools 调用逼模型就现有信息作答 |
+| 成本上限 | `AGENT_MAX_COST_YUAN=0.05` | 累计成本超上限立即停，不回灌下一轮 |
+| 总超时 | `AGENT_TIMEOUT_SECONDS=60` | 单请求 wall-clock 兜底 |
+| 重复调用 | `AGENT_REPEAT_CALL_LIMIT=2` | 同 name+arguments 超阈值 → 拒执行、不记 step、回灌提示并 break（防死循环刷 token） |
+
+### 真实基线（★ 真实 DeepSeek + 真实 PG 语料，5 例）
+
+| 指标 | 值 | 说明 |
+| --- | --- | --- |
+| 工具选择准确率 | **1.0（5/5）** | 实际调用集合 == 期望集合（严格相等，多调/漏调都算错） |
+| 平均步数 | 1.8 | 效率；无来回试 |
+| 保护触发率 | 0.0 | 没有用例撞上上限——路径可用 |
+| Agent 平均成本 | 0.0014 元 | vs 快速路径 §7.2 SQL 均价 0.000239 元 |
+| 成本倍率 | 2.8×（vs 0.0005 基准）/ 实际约 5.9× | 决定 **Agent 不默认开**，按需走 `/chat/agent` |
+
+- 复现：`.venv/bin/python scripts/eval_agent.py --hybrid --fast-path-cost 0.0005 --json app/evals/baseline_agent.json`。
+- 迁移 `e5f6a7b8c9d0`（chat_logs 加 `is_agent`/`agent_steps`/`agent_tools` 三列，NOT NULL + server_default 回填）已在真实 PG `alembic upgrade head` 应用。
+- 全量：`.venv/bin/python -m pytest -q` → **260 passed / 2 deselected**（阶段 6 的 213 + 本阶段 47，零回归）。
+
+### 阶段 5 踩过的坑
+
+**a. ★ DeepSeek 的 `tool_calls` 在 `choices[0].message.tool_calls`，不在顶层。** 文档 §5 伪代码 `result.raw.get("tool_calls")` 真机取不到。修复：`llm._parse` 把 message 级 `tool_calls`/`reasoning_content` **上浮到 `raw` 顶层**，同时兼容测试里 ScriptedLLM 的顶层写法。
+
+**b. `calc` 遇 `2**100000` 抛 `OverflowError`——独立于 SyntaxError/ValueError/TypeError。** 不显式捕获会逃出工具 → 崩 agent 循环 → 500。修复：计算前限制指数 `abs<=1000`，`except` 显式带 `OverflowError`。
+
+**c. 工具描述必须互斥、写明"不要用"边界。** 实测描述重叠模型会错调（该 calc 却检索）。`test_tool_descriptions_state_when_not_to_use` 机械钉住每个描述含"不要用于/仅当"字样。
+
+**d. 重复调用被拒时不能记 step。** 否则 `tool_counts` 虚高、评测指标失真。被拒只回灌可读提示 + break，未执行的调用不算一次"调用"。
+
+---
+
 ## 阶段 6 落地：评估体系 + 可观测性
 
-对应 [docs/项目实现文档-阶段6.md](docs/项目实现文档-阶段6.md)。阶段 5（Agent）按约定暂不做。
+对应 [docs/项目实现文档-阶段6.md](docs/项目实现文档-阶段6.md)。
 
 ### 基线表（★ 真实 embedder + 真实 DeepSeek judge + 真实 PG，24 条手标用例）
 

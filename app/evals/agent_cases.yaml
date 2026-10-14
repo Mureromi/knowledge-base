@@ -1,0 +1,47 @@
+# Agent 增量评测集（阶段 5，docs/项目实现文档-阶段5.md §9.2）
+#
+# ★ 语料复用阶段 6 的 qa_cases.yaml（documents 段）——单一事实源，不重复维护两份文档。
+#   eval_agent.py 从 qa_cases.yaml 读 `documents` 灌库，从本文件读 `cases`。
+#
+# ★ 这里只放**快速路径量不到的问题类型**（文档 §9.1）：计算 / 相对时间 / 多跳组合。
+#   阶段 6 那 24 条是单跳检索题，快速路径已接近满分，Agent 在其上无增量——
+#   所以对 Agent 真正有区分度的度量是「有没有调对工具」（expect_tool），
+#   而不只是最终答案（答案对了但工具调错是运气，工具对了答案错才是推理问题）。
+#
+# 字段：
+#   expect_tool   期望被调用的工具集合（list 或裸字符串）；用于「工具选择准确率」
+#   key_points    最终回答应覆盖的要点（供人工/裁判参考，本脚本以工具选择为主）
+#   tags          用例分类
+
+version: 1
+
+cases:
+  - id: discount_calc
+    question: 一件商品原价 120 元，打八五折后多少钱？
+    expect_tool: [calc]                    # 纯计算，不该去检索知识库
+    key_points: ["结果是 102 元"]
+    tags: [计算]
+
+  - id: policy_plus_calc
+    question: 我买了两件 89 元的商品，需要另外付运费吗？一共多少钱？
+    expect_tool: [search_kb, calc]         # ★ 必须两跳：先查运费规则，再算总价
+    key_points: ["满 99 元免运费", "总计 178 元，无需运费"]
+    tags: [多跳, 计算]
+
+  - id: relative_time
+    question: 今天是几号？我现在还能补申请开票吗（假设刚下单不久）？
+    expect_tool: [now, search_kb]          # ★ 相对时间 + 检索发票时限
+    key_points: ["先确认今天日期", "发票需在下单后 7 天内申请"]
+    tags: [相对时间, 多跳]
+
+  - id: membership_save_calc
+    question: 黄金会员年费多少？按全场折扣，买原价 300 元的商品能便宜多少（先看会员权益）？
+    expect_tool: [search_kb, calc]         # 先检索 95 折，再算 300*0.95 与差价
+    key_points: ["年费 88 元", "全场 95 折", "便宜 15 元"]
+    tags: [多跳, 计算, 会员]
+
+  - id: freight_shortfall
+    question: 一单实付 95 元，比包邮门槛差多少？
+    expect_tool: [search_kb, calc]         # 检索门槛 99，再算差额
+    key_points: ["包邮门槛 99 元", "还差 4 元"]
+    tags: [多跳, 计算, 运费]

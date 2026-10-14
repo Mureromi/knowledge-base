@@ -150,5 +150,16 @@ class Settings(BaseSettings):
     eval_judge_model: str = ""          # 留空则复用 llm_model（DeepSeek 自己当裁判）
     eval_judge_temperature: float = 0.0  # ★ 评测必须确定性（§4.3）
 
+    # ---- 阶段 5：Agent / 工具调用（docs/项目实现文档-阶段5.md §3） ----
+    # 原生 Function Calling + 自写循环；新增 /chat/agent，快速路径 /chat 不受影响。
+    agent_enabled: bool = True
+    # ★ 四层保护（§5.1）：任一层缺失都可能让单次问答成本失控或无限循环。
+    agent_max_steps: int = 6            # 保护 1：最大工具调用轮数（防无限循环烧钱）
+    agent_max_cost_yuan: float = 0.05   # 保护 2：单次问答成本上限（超出即停止并降级作答）
+    agent_timeout_seconds: float = 60.0  # 保护 3：总超时
+    agent_repeat_call_limit: int = 2    # 保护 4：同工具+同参数连续调用超过此次数判为循环
+    # 单个工具结果截断上限：工具输出会进 context，超长会挤掉真正的参考资料
+    agent_tool_result_max_chars: int = 2000
+
 
 settings = Settings()

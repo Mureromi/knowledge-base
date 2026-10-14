@@ -1,0 +1,87 @@
+{
+  "config": {
+    "case_count": 5
+  },
+  "metrics": {
+    "tool_selection_accuracy": 1.0,
+    "avg_steps": 1.8,
+    "protection_trigger_rate": 0.0,
+    "avg_cost_yuan": 0.0014,
+    "cost_multiple_vs_fast_path": 2.8
+  },
+  "cases": [
+    {
+      "id": "discount_calc",
+      "expect_tool": [
+        "calc"
+      ],
+      "tools": [
+        "calc"
+      ],
+      "tool_match": true,
+      "steps": 1,
+      "stopped_reason": null,
+      "cost_yuan": 0.001158
+    },
+    {
+      "id": "policy_plus_calc",
+      "expect_tool": [
+        "calc",
+        "search_kb"
+      ],
+      "tools": [
+        "calc",
+        "search_kb"
+      ],
+      "tool_match": true,
+      "steps": 2,
+      "stopped_reason": null,
+      "cost_yuan": 0.00159
+    },
+    {
+      "id": "relative_time",
+      "expect_tool": [
+        "now",
+        "search_kb"
+      ],
+      "tools": [
+        "now",
+        "search_kb"
+      ],
+      "tool_match": true,
+      "steps": 2,
+      "stopped_reason": null,
+      "cost_yuan": 0.001405
+    },
+    {
+      "id": "membership_save_calc",
+      "expect_tool": [
+        "calc",
+        "search_kb"
+      ],
+      "tools": [
+        "calc",
+        "search_kb"
+      ],
+      "tool_match": true,
+      "steps": 2,
+      "stopped_reason": null,
+      "cost_yuan": 0.001435
+    },
+    {
+      "id": "freight_shortfall",
+      "expect_tool": [
+        "calc",
+        "search_kb"
+      ],
+      "tools": [
+        "calc",
+        "search_kb"
+      ],
+      "tool_match": true,
+      "steps": 2,
+      "stopped_reason": null,
+      "cost_yuan": 0.001232
+    }
+  ]
+}

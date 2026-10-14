@@ -138,6 +138,7 @@ class LLMClient:
         user_id: str | None = None,
         json_mode: bool = False,
         thinking: bool | None = None,
+        tools: list[dict] | None = None,
     ) -> LLMResult:
         thinking = settings.llm_thinking if thinking is None else thinking
 
@@ -160,6 +161,11 @@ class LLMClient:
         if user_id:
             # DeepSeek 扩展：多用户隔离 + KVCache 隔离。不可含隐私信息。
             payload["user_id"] = user_id
+        if tools:
+            # ★ 阶段 5：Function Calling。显式声明 tool_choice=auto（默认值可能随版本变），
+            #   让模型自己决定是否调工具。见 docs/项目实现文档-阶段5.md §5.3。
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
 
         start = time.perf_counter()
         last_exc: Exception | None = None
@@ -293,7 +299,8 @@ class LLMClient:
     def _parse(self, data: dict, start: float) -> LLMResult:
         latency_ms = int((time.perf_counter() - start) * 1000)
         choice = (data.get("choices") or [{}])[0]
-        content = (choice.get("message") or {}).get("content") or ""
+        message = choice.get("message") or {}
+        content = message.get("content") or ""
         usage = data.get("usage") or {}
 
         prompt_tokens = int(usage.get("prompt_tokens") or 0)
@@ -313,6 +320,15 @@ class LLMClient:
         )
         model = data.get("model") or settings.llm_model
         peak = is_peak_now()
+
+        # ★ 阶段 5：把 message 级的 tool_calls / reasoning_content 上浮到 raw 顶层。
+        #   真实响应里它们在 choices[0].message 下，而 Agent 循环（§5）习惯写
+        #   result.raw.get("tool_calls")——不修正这里，真机上永远取到 None。
+        #   测试用的 ScriptedLLM 直接把 tool_calls 放在 raw 顶层，两种写法从此统一。
+        if message.get("tool_calls") is not None:
+            data["tool_calls"] = message["tool_calls"]
+        if message.get("reasoning_content") is not None:
+            data["reasoning_content"] = message["reasoning_content"]
 
         return LLMResult(
             content=content,

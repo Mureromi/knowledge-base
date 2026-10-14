@@ -47,6 +47,14 @@ class ChatResponse(BaseModel):
     retrieval_mode: str = "hybrid"
     # 阶段 2：本轮所属会话（后续请求带上它即可续聊）
     session_id: int
+    # ---- 阶段 5：仅 /chat/agent 路径会填这三个字段（快速路径保持 None/默认）----
+    # 走了几步工具：1 步和 6 步的延迟差异巨大，让调用方看得到
+    agent_steps: int | None = None
+    # 各工具被调用次数，形如 {"search_kb": 2, "calc": 1}；便于前端展示"它查了库、算了"
+    agent_tools: dict[str, int] | None = None
+    # ★ 保护触发时如实告知（max_steps / cost_limit / timeout / repeat_call）；
+    #   正常完成为 None。避免用户把一个被上限拦断的不完整回答当成完整答案。
+    stopped_reason: str | None = None
 
 
 # ---- 会话管理（§6.1 的 sessions CRUD） ----

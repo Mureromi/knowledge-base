@@ -48,6 +48,15 @@ class ChatLog(Base):
     cited_chunk_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
     # 阶段 1：缓存命中标记（§9 的命中率 SQL 全靠它）
     cache_hit: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # ---- 阶段 5：Agent 路径统计（docs/项目实现文档-阶段5.md §3）----
+    # 评估只测“质量”不测“路径”（阶段 6），这三列让你能回答：
+    #   Agent 成本比快速路径高多少倍 / 平均调几次工具 / 哪个工具被调最多。
+    # 本次是否走了 agent 路径（便于两条路径分开统计成本与延迟）
+    is_agent: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # 工具调用轮数（0 = 没调工具，直接回答）
+    agent_steps: Mapped[int] = mapped_column(Integer, default=0)
+    # 调了哪些工具及次数，形如 {"search_kb": 2, "calc": 1}
+    agent_tools: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

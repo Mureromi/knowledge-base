@@ -36,6 +36,8 @@ from app.api.v1.deps import (
     StreamSessionFactoryDep,
 )
 from app.core.config import settings
+from app.clients.tracing import new_trace
+from app.models.chat_log import ChatLog
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
 from app.schemas.chat import (
@@ -50,7 +52,8 @@ from app.schemas.chat import (
 )
 from app.services import qa as qa_service
 from app.services import session as session_service
-from app.services.ratelimit import check_rate_limit
+from app.services.agent import AgentRunner
+from app.services.ratelimit import check_daily_quota, check_rate_limit
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -201,6 +204,83 @@ async def chat_sync(
         usage=Usage(**result.usage),
         retrieval_mode=result.usage.get("retrieval_mode", "keyword"),
         session_id=result.session_id,
+    )
+
+
+@router.post("/agent", response_model=ChatResponse, summary="问答（Agent，可调用工具）")
+async def chat_agent(
+    payload: ChatRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+    llm: LLMDep,
+    cache: CacheDep,
+    embedder: EmbedderDep,
+    reranker: RerankerDep,
+) -> ChatResponse:
+    """Agent 路径（阶段 5）。延迟与成本都高于 /chat/sync，但能多步推理与调用工具。
+
+    ★ 与快速路径共存、互不影响：这里不复用 qa.run_answer 的缓存与查询改写，
+      因为 Agent 的“要不要检索、检索几次、用什么词”都是模型运行时决定的，
+      阶段 1 的检索指纹无法预先算（文档 §7.1）。落库仍复用 chat_logs，额外写三个
+      agent 字段，供 §7.2 的两条路径成本对比。
+    """
+    if not settings.agent_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40405, "message": "Agent 路径未启用", "detail": None},
+        )
+
+    await check_rate_limit(cache, current_user.id)
+    await check_daily_quota(cache, current_user.id)      # ★ Agent 更该受配额约束（§7.3）
+
+    session = await session_service.get_or_create_session(
+        db, owner_id=current_user.id,
+        session_id=payload.session_id, first_question=payload.question,
+    )
+    window = await session_service.load_window_messages(db, session_id=session.id)
+
+    runner = AgentRunner(
+        db, llm, owner_id=current_user.id, embedder=embedder, reranker=reranker
+    )
+    run = await runner.run(payload.question, history=window, trace=new_trace())
+
+    cited_ids = [c.chunk_id for c in run.citations]
+    # 落库：复用 chat_logs，新增三个 agent 字段（commit 靠 get_db 请求末尾统一做）
+    db.add(
+        ChatLog(
+            owner_id=current_user.id, session_id=session.id,
+            question=payload.question, answer=run.answer,
+            prompt_tokens=run.prompt_tokens, completion_tokens=run.completion_tokens,
+            cached_tokens=run.cached_tokens, cost_yuan=run.cost_yuan,
+            latency_ms=run.latency_ms, model=settings.llm_model,
+            cited_chunk_ids=cited_ids, cache_hit=False,
+            is_agent=True, agent_steps=len(run.steps), agent_tools=run.tool_counts,
+        )
+    )
+    await session_service.append_turn(
+        db, session=session, question=payload.question, answer=run.answer,
+        cited_chunk_ids=cited_ids, cache_hit=False,
+    )
+
+    return ChatResponse(
+        answer=run.answer,
+        citations=[
+            Citation(
+                document_id=c.document_id, document_title=c.document_title,
+                chunk_id=c.chunk_id, seq=c.seq, score=c.score,
+                keyword_rank=c.keyword_rank, vector_rank=c.vector_rank,
+            )
+            for c in run.citations
+        ],
+        usage=Usage(
+            prompt_tokens=run.prompt_tokens, completion_tokens=run.completion_tokens,
+            cost_yuan=run.cost_yuan, latency_ms=run.latency_ms, cache_hit=False,
+        ),
+        retrieval_mode="agent",
+        session_id=session.id,
+        agent_steps=len(run.steps),           # ★ 新增：让调用方看到走了几步
+        agent_tools=run.tool_counts,           # ★ 新增
+        stopped_reason=run.stopped_reason,     # ★ 新增：保护触发时如实告知
     )
 
 
