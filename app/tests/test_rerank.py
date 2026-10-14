@@ -12,8 +12,12 @@ from app.tests.conftest import FakeEmbedder, FakeReranker
 
 
 @pytest.mark.asyncio
-async def test_rerank_reorders_by_scores(db_session, seed_document):
-    """精排改变顺序：假 reranker 返回指定分数 → 顺序按分数排。"""
+async def test_rerank_reorders_by_scores(db_session, seed_document, monkeypatch):
+    """精排改变顺序：假 reranker 返回指定分数 → 顺序按分数排。
+
+    ★ 显式打开 rerank：默认值是 False（§15.6 实测决策），依赖默认值会让测试变脆。
+    """
+    monkeypatch.setattr(settings, "rerank_enabled", True)
     _doc, chunks = await seed_document(
         chunks=[("退款一条", None), ("退款二条", None), ("退款三条", None)]
     )
@@ -51,8 +55,16 @@ async def test_rerank_disabled_skips_reranker(db_session, seed_document, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_rerank_skipped_when_too_few_candidates(db_session, seed_document):
-    """候选少于 rerank_min_candidates：跳过精排（不白跑模型）。"""
+async def test_rerank_skipped_when_too_few_candidates(
+    db_session, seed_document, monkeypatch
+):
+    """候选少于 rerank_min_candidates：跳过精排（不白跑模型）。
+
+    ★ 必须显式打开 rerank：默认值是 False（§15.6 实测决策）。
+      否则这条会**因为"未启用"而通过**——断言 reranker.calls == [] 照样成立，
+      但它已经不再验证"候选不足时跳过"这个行为了（假通过）。
+    """
+    monkeypatch.setattr(settings, "rerank_enabled", True)
     _doc, chunks = await seed_document(chunks=[("退款唯一", None)])
     reranker = FakeReranker()
     results = await search(
@@ -64,8 +76,15 @@ async def test_rerank_skipped_when_too_few_candidates(db_session, seed_document)
 
 
 @pytest.mark.asyncio
-async def test_rerank_failure_degrades_to_rrf_order(db_session, seed_document):
-    """★ rerank 抛异常 → 降级为 RRF 顺序，问答不受影响（§9.2，文档伪代码缺的这层保护）。"""
+async def test_rerank_failure_degrades_to_rrf_order(
+    db_session, seed_document, monkeypatch
+):
+    """★ rerank 抛异常 → 降级为 RRF 顺序，问答不受影响（§9.2，文档伪代码缺的这层保护）。
+
+    ★ 必须显式打开 rerank：默认值是 False（§15.6 实测决策）。
+      否则**降级分支根本不会被触发**——这条保护层就没人看着了。
+    """
+    monkeypatch.setattr(settings, "rerank_enabled", True)
     _doc, chunks = await seed_document(
         chunks=[("退款一条", None), ("退款二条", None), ("退款三条", None)]
     )

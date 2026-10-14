@@ -1,0 +1,1217 @@
+{
+  "config": {
+    "mode": "hybrid",
+    "rerank_enabled": false,
+    "embedding_enabled": true,
+    "top_k": 5,
+    "query_rewrite_enabled": true,
+    "case_count": 24,
+    "tag": null
+  },
+  "retrieval": {
+    "hit@5": 1.0,
+    "recall@5": 1.0,
+    "mrr": 0.95
+  },
+  "generation": {
+    "faithfulness": 1.0,
+    "completeness": 0.925,
+    "refusal_accuracy": 1.0
+  },
+  "cases": [
+    {
+      "id": "refund_eta",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 0.5
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 54,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "审核通过后，款项将在 5-7 个工作日退回原支付渠道。[1]",
+        "judge_reason": "回答内容与参考资料中退款流程的表述完全一致",
+        "missing_points": [
+          "客服 3 个工作日内审核"
+        ]
+      }
+    },
+    {
+      "id": "invoice_deadline",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": 2,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": 3,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 60,
+            "keyword_rank": 5,
+            "vector_rank": 5
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": 4,
+            "vector_rank": 7
+          }
+        ],
+        "answer": "有。需在下单后 7 天内申请。[1]",
+        "judge_reason": "回答内容与参考资料中发票需在下单后7天内申请一致",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "shipping_time",
+      "passed": false,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 0.5
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": 1,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 54,
+            "keyword_rank": null,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "现货商品 24 小时内发货，一般 2-3 天送达，偏远地区顺延至 5-7 天。[2]",
+        "judge_reason": "回答内容与参考资料中配送时效的表述完全一致",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "membership_benefit",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 56,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 57,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "黄金会员年费 88 元，享全场 95 折、生日当月双倍积分与专属客服通道。[1]",
+        "judge_reason": "回答内容与参考资料中黄金会员权益完全一致",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "points_redeem",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 57,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 56,
+            "keyword_rank": 2,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "每消费 1 元累积 1 积分，积分可在结算时抵扣现金，100 积分抵 1 元，单笔最多抵扣货款的 30%。[1]",
+        "judge_reason": "回答内容与参考资料中的积分规则完全一致，无额外事实或矛盾",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "password_reset",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 59,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 58,
+            "keyword_rank": 2,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 60,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "忘记密码可通过注册手机号接收验证码重置；若号码不可用，可提交身份证明，人工审核将在 3 个工作日内完成。[1]",
+        "judge_reason": "回答内容与参考资料中忘记密码重置及人工审核3个工作日的表述完全一致",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "invoice_lost",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": 2,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 59,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "可以。发票遗失可在账户后台申请重新开具，一年以内最多重开 3 次。[1]",
+        "judge_reason": "回答内容与参考资料中发票遗失重开的规定完全一致",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "quality_exchange",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": 2,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 54,
+            "keyword_rank": 3,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "可以。商品存在质量问题时，签收 15 天内可免费换新一次，换货运费由平台承担。[1]",
+        "judge_reason": "回答内容与参考资料中质量问题换货条款完全一致",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "refund_eta_colloquial",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": null,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 57,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "审核通过后，款项将在 5-7 个工作日退回原支付渠道 [1]。",
+        "judge_reason": "回答内容与参考资料中退款流程的表述完全一致",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "shipping_colloquial",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 54,
+            "keyword_rank": null,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 59,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "现货商品 24 小时内发货，一般 2-3 天送达，偏远地区顺延至 5-7 天。[1]",
+        "judge_reason": "回答内容与参考资料中配送时效的表述完全一致",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "membership_colloquial",
+      "passed": false,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 0.5
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 0.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": null,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 57,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 56,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "根据现有资料无法回答。",
+        "judge_reason": "回答仅表示无法根据资料回答，未引入任何无依据事实",
+        "missing_points": [
+          "全场 95 折"
+        ]
+      }
+    },
+    {
+      "id": "data_export_colloquial",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 58,
+            "keyword_rank": 1,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 60,
+            "keyword_rank": null,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 59,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "可在账户设置的隐私页面申请数据导出，提交后 15 个工作日内数据包会发送至注册邮箱 [2]。",
+        "judge_reason": "回答内容与参考资料中数据导出的申请方式和15个工作日发送至注册邮箱完全一致",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "freight_colloquial",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": null,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 57,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "是否要自己出邮费，取决于订单金额：单笔订单实付满 99 元免运费，未满则收取基础运费 8 元，超重部分另按 2 元每公斤计续重费 [1]。此外，若因质量问题换货，签收 15 天内可免费换新一次，换货运费由平台承担 [2]。",
+        "judge_reason": "回答内容均可在参考资料中对应找到，无额外事实或矛盾",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "cross_refund_invoice",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": 2,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": 3,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "退款：需在订单页提交退款申请，客服在 3 个工作日内完成审核，审核通过后款项将在 5-7 个工作日退回原支付渠道 [1]。发票：需在下单后 7 天内申请，电子发票在收货后 3 个工作日内发送至预留邮箱 [2]。",
+        "judge_reason": "回答内容与参考资料中的退款流程和发票开具信息完全一致，无额外事实或矛盾。",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "cross_return_membership",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": 2,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 56,
+            "keyword_rank": 4,
+            "vector_rank": 5
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 54,
+            "keyword_rank": 3,
+            "vector_rank": 8
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": null,
+            "vector_rank": 2
+          }
+        ],
+        "answer": "定制商品不支持七天无理由退货 [1]。黄金会员享全场 95 折 [3]。",
+        "judge_reason": "回答中的两点均可在参考资料中直接找到依据",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "cross_freight_fee",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": 1,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": 3,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": 2,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "包邮门槛：单笔订单实付满 99 元免运费，未满则收取基础运费 8 元 [2]。\n\n退货运费：参考资料未说明退货运费由谁承担；仅提到质量问题换货时换货运费由平台承担 [1]。根据现有资料无法回答退货运费由谁出。",
+        "judge_reason": "回答内容均可在参考资料中找到依据，且对未说明的退货运费如实表示无法回答",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "unanswerable_ceo",
+      "passed": true,
+      "retrieval": {
+        "hit@5": null,
+        "recall@5": null,
+        "rr": null
+      },
+      "generation": {
+        "refused": true
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 60,
+            "keyword_rank": null,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 56,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 58,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 59,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "根据现有资料无法回答。"
+      }
+    },
+    {
+      "id": "unanswerable_revenue",
+      "passed": true,
+      "retrieval": {
+        "hit@5": null,
+        "recall@5": null,
+        "rr": null
+      },
+      "generation": {
+        "refused": true
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": null,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 57,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 54,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "根据现有资料无法回答。"
+      }
+    },
+    {
+      "id": "unanswerable_weather",
+      "passed": true,
+      "retrieval": {
+        "hit@5": null,
+        "recall@5": null,
+        "rr": null
+      },
+      "generation": {
+        "refused": true
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 54,
+            "keyword_rank": null,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 56,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 58,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "根据现有资料无法回答。"
+      }
+    },
+    {
+      "id": "unanswerable_recipe",
+      "passed": true,
+      "retrieval": {
+        "hit@5": null,
+        "recall@5": null,
+        "rr": null
+      },
+      "generation": {
+        "refused": true
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 54,
+            "keyword_rank": null,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "会员与积分",
+            "chunk_id": 57,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 58,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "根据现有资料无法回答。"
+      }
+    },
+    {
+      "id": "multiturn_return",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": null,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": null,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "商品签收后 7 天内可申请无理由退货，定制品与生鲜类商品不支持七天无理由退货；贴身衣物一经拆封不予退换 [1]。",
+        "judge_reason": "回答内容与参考资料中的退货政策完全一致，无额外事实或矛盾",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "multiturn_invoice",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": 2,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "账号与安全",
+            "chunk_id": 60,
+            "keyword_rank": 3,
+            "vector_rank": 5
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 54,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": null,
+            "vector_rank": 4
+          }
+        ],
+        "answer": "根据现有资料无法回答。参考资料中仅提到电子发票在收货后 3 个工作日内发送至预留邮箱 [1]，但未说明发票\"开好\"的具体时间。",
+        "judge_reason": "回答仅指出资料未说明发票开好的具体时间，与参考资料一致，无额外事实或矛盾",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "return_exception",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": 2,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 54,
+            "keyword_rank": 3,
+            "vector_rank": 4
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": null,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "物流与配送",
+            "chunk_id": 55,
+            "keyword_rank": null,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "定制品与生鲜类商品不支持七天无理由退货；贴身衣物一经拆封不予退换。[1]",
+        "judge_reason": "回答内容与参考资料中退货政策的表述完全一致",
+        "missing_points": []
+      }
+    },
+    {
+      "id": "exchange_window",
+      "passed": true,
+      "retrieval": {
+        "hit@5": true,
+        "recall@5": 1.0,
+        "rr": 1.0
+      },
+      "generation": {
+        "faithfulness": 1.0,
+        "completeness": 1.0
+      },
+      "details": {
+        "retrieved": [
+          {
+            "document_title": "售后政策",
+            "chunk_id": 51,
+            "keyword_rank": 1,
+            "vector_rank": 1
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 49,
+            "keyword_rank": 2,
+            "vector_rank": 3
+          },
+          {
+            "document_title": "售后政策",
+            "chunk_id": 50,
+            "keyword_rank": 3,
+            "vector_rank": 2
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 52,
+            "keyword_rank": 4,
+            "vector_rank": 6
+          },
+          {
+            "document_title": "发票说明",
+            "chunk_id": 53,
+            "keyword_rank": 5,
+            "vector_rank": 5
+          }
+        ],
+        "answer": "签收 15 天内可免费换新一次。[1]",
+        "judge_reason": "回答内容与参考资料中质量问题换货的15天免费换新一次完全一致",
+        "missing_points": []
+      }
+    }
+  ],
+  "cost_yuan": 0.051697,
+  "judge_validated": true
+}

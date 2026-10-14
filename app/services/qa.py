@@ -21,6 +21,7 @@ from app.clients.cache import CacheBackend
 from app.clients.embedding import EmbeddingClient
 from app.clients.llm import LLMClient, LLMError, LLMResult
 from app.clients.rerank import RerankClient
+from app.clients.tracing import new_trace, trace_span, update_span
 from app.core.config import settings
 from app.models.chat_log import ChatLog
 from app.models.chat_session import ChatSession
@@ -288,7 +289,13 @@ async def run_answer(
     embedder: EmbeddingClient | None = None,
     reranker: RerankClient | None = None,
 ) -> AnswerResult:
-    """非流式完整问答。逻辑与阶段 1 相同，只是加了会话历史与溯源。"""
+    """非流式完整问答。逻辑与阶段 1 相同，只是加了会话历史与溯源。
+
+    ★ 阶段 6 埋点（§3.4）：rewrite / retrieval / cache_lookup / llm_call 四个 span
+      挂同一条 trace。未启用 Langfuse 时 trace_span 全 no-op，**行为与埋点前完全一致**
+      （test_tracing 钉住"开/关结果一致"）。
+    """
+    trace = new_trace()
     session = await get_or_create_session(
         db, owner_id=owner_id, session_id=session_id, first_question=question
     )
@@ -297,27 +304,40 @@ async def run_answer(
 
     # ★ 阶段 4：多轮追问先改写成自包含检索句（首轮 window 空 → 直接用原问题）。
     #   resolved 只用于检索；发给 LLM 的仍是原始 question（§4.3，别写反）。
-    resolved = await rewrite_query(
-        db, llm, cache,
-        owner_id=owner_id, session_id=session.id,
-        question=question, window=window,
-    )
+    with trace_span("query_rewrite", attach_to=trace) as rw_span:
+        resolved = await rewrite_query(
+            db, llm, cache,
+            owner_id=owner_id, session_id=session.id,
+            question=question, window=window,
+        )
+        update_span(rw_span, output={"resolved": resolved},
+                    metadata={"rewritten": resolved != question})
+    # ↑ 改写自身的 LLM 调用在 query_rewrite 内部（命中改写缓存时无调用）；
+    #   这里记的是"本轮改写结果"，原文→改写句的对照是排查检索偏差的第一现场。
     mode = resolve_retrieval_mode(embedder, reranker)
-    chunks = await search(
-        db, owner_id=owner_id, question=resolved, top_k=top_k,
-        embedder=embedder, reranker=reranker,
-    )
+    with trace_span("retrieval", attach_to=trace, retrieval_mode=mode) as ret_span:
+        chunks = await search(
+            db, owner_id=owner_id, question=resolved, top_k=top_k,
+            embedder=embedder, reranker=reranker,
+        )
+        update_span(ret_span, output=[
+            {"chunk_id": c.chunk_id, "document_title": c.document_title,
+             "keyword_rank": c.keyword_rank, "vector_rank": c.vector_rank, "score": c.score}
+            for c in chunks
+        ], metadata={"question_resolved": resolved, "count": len(chunks)})
     if not chunks:
         return AnswerResult(NO_RESULT_ANSWER, [], _no_result_usage(mode), session.id)
 
-    cache_key, cached, citations = await _lookup_cache(
-        db,
-        cache,
-        owner_id=owner_id,
-        question=question,
-        chunks=chunks,
-        window=window,
-    )
+    with trace_span("cache_lookup", attach_to=trace) as cache_span:
+        cache_key, cached, citations = await _lookup_cache(
+            db,
+            cache,
+            owner_id=owner_id,
+            question=question,
+            chunks=chunks,
+            window=window,
+        )
+        update_span(cache_span, metadata={"hit": cached is not None and citations is not None})
     if cached is not None and citations is not None:
         await _persist_hit(
             db,
@@ -336,11 +356,18 @@ async def run_answer(
     messages = build_messages(question, chunks, window)
 
     async with distributed_llm_slot(cache):
-        result = await llm.chat(
-            messages,
-            temperature=0.2,
-            user_id=f"u{owner_id}",     # 隔离用，不含隐私信息
-        )
+        with trace_span("llm_call", as_type="generation", attach_to=trace) as gen_span:
+            result = await llm.chat(
+                messages,
+                temperature=0.2,
+                user_id=f"u{owner_id}",     # 隔离用，不含隐私信息
+            )
+            update_span(gen_span, input=messages, output=result.content, model=result.model,
+                        usage_details={"input": result.prompt_tokens,
+                                       "output": result.completion_tokens},
+                        metadata={"cost_yuan": result.cost_yuan,
+                                  "latency_ms": result.latency_ms,
+                                  "cached_tokens": result.cached_tokens})
 
     # ---------- 写缓存（空答案不缓存）----------
     if settings.cache_enabled and result.content.strip():
@@ -435,16 +462,26 @@ async def run_answer_stream(
             window = await load_window_messages(db, session_id=session.id)
 
             # ★ 阶段 4：同非流式——先改写检索句，发给 LLM 仍是原问题。
-            resolved = await rewrite_query(
-                db, llm, cache,
-                owner_id=owner_id, session_id=session.id,
-                question=question, window=window,
-            )
+            trace = new_trace()
+            with trace_span("query_rewrite", attach_to=trace) as rw_span:
+                resolved = await rewrite_query(
+                    db, llm, cache,
+                    owner_id=owner_id, session_id=session.id,
+                    question=question, window=window,
+                )
+                update_span(rw_span, output={"resolved": resolved},
+                            metadata={"rewritten": resolved != question})
             mode = resolve_retrieval_mode(embedder, reranker)
-            chunks = await search(
-                db, owner_id=owner_id, question=resolved, top_k=top_k,
-                embedder=embedder, reranker=reranker,
-            )
+            with trace_span("retrieval", attach_to=trace, retrieval_mode=mode) as ret_span:
+                chunks = await search(
+                    db, owner_id=owner_id, question=resolved, top_k=top_k,
+                    embedder=embedder, reranker=reranker,
+                )
+                update_span(ret_span, output=[
+                    {"chunk_id": c.chunk_id, "document_title": c.document_title,
+                     "keyword_rank": c.keyword_rank, "vector_rank": c.vector_rank, "score": c.score}
+                    for c in chunks
+                ], metadata={"question_resolved": resolved, "count": len(chunks)})
             if not chunks:
                 yield ("meta", {"session_id": session.id, "cache_hit": False})
                 yield ("delta", {"text": NO_RESULT_ANSWER})
@@ -453,14 +490,16 @@ async def run_answer_stream(
                 await db.commit()
                 return
 
-            cache_key, cached, citations = await _lookup_cache(
-                db,
-                cache,
-                owner_id=owner_id,
-                question=question,
-                chunks=chunks,
-                window=window,
-            )
+            with trace_span("cache_lookup", attach_to=trace) as cache_span:
+                cache_key, cached, citations = await _lookup_cache(
+                    db,
+                    cache,
+                    owner_id=owner_id,
+                    question=question,
+                    chunks=chunks,
+                    window=window,
+                )
+                update_span(cache_span, metadata={"hit": cached is not None and citations is not None})
 
             # ---------- 命中：假装流式 ----------
             if cached is not None and citations is not None:
@@ -544,6 +583,17 @@ async def run_answer_stream(
                 cost_yuan=usage.cost_yuan,
                 peak=usage.peak,
             )
+
+            # ★ 流式的 llm_call 记录放在循环之后：循环体含 yield（逐块推给客户端），
+            #   若把 span 包在循环外会跨多次挂起/恢复、时长失真。这里只补记关键
+            #   metadata（prompt/completion/tokens/cost），足以在 Langfuse 回放本次生成。
+            with trace_span("llm_call", as_type="generation", attach_to=trace) as gen_span:
+                update_span(gen_span, input=messages, output=content, model=result.model,
+                            usage_details={"input": result.prompt_tokens,
+                                           "output": result.completion_tokens},
+                            metadata={"cost_yuan": result.cost_yuan,
+                                      "latency_ms": result.latency_ms,
+                                      "cached_tokens": result.cached_tokens})
 
             # 写缓存（空答案不缓存；§5.5 缓存击穿已明确记为技术债，本阶段不做锁）
             if settings.cache_enabled and content.strip():

@@ -15,13 +15,26 @@ from app.clients.embedding import embedding_client
 from app.clients.llm import llm_client
 from app.clients.queue import shutdown_queue, startup_queue
 from app.clients.rerank import rerank_client
+from app.clients import tracing
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
+from app.core.logging import log_startup_banner, setup_logging
 from app.db.session import dispose_engine, init_models
+
+# ★ 模块顶层就配一次日志：uvicorn 在 import app **之前** 已经打了几行
+#   （"Started server process"、"Waiting for application startup"），
+#   只在 lifespan 里配的话那几行是裸格式。这里先配，lifespan 里再配一次
+#   （幂等，不叠加 handler）以兜住 fork/reload 场景。
+setup_logging(force=True)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # ★ 日志配置必须在这里（而不是模块顶层）：uvicorn 会在导入 app 之后才配置它自己的
+    #   logging，顶层配置会被它覆盖掉，导致结构化日志静默失效。
+    setup_logging(force=True)
+    log_startup_banner("web")
+
     await init_models()
     await llm_client.startup()
     await startup_cache()
@@ -34,7 +47,11 @@ async def lifespan(app: FastAPI):
         embedding_client.startup()
     if settings.rerank_enabled:
         rerank_client.startup()
+    # ★ 阶段 6：可观测。未启用/缺 key 时内部自动降级为 no-op，不影响启动（§3.2）。
+    tracing.startup()
     yield
+    # ★ tracing.shutdown() 必须调：Langfuse 异步批量上报，不 flush 会丢最后几次 trace（§3.3）。
+    tracing.shutdown()
     await llm_client.shutdown()
     await shutdown_cache()
     await shutdown_queue()

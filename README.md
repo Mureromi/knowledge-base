@@ -4,6 +4,40 @@
 
 代码位于 `app/` 包，是 [docs/项目实现文档-阶段0.md](docs/%E9%A1%B9%E7%9B%AE%E5%AE%9E%E7%8E%B0%E6%96%87%E6%A1%A3-%E9%98%B6%E6%AE%B50.md)、[docs/项目实现文档-阶段1.md](docs/%E9%A1%B9%E7%9B%AE%E5%AE%9E%E7%8E%B0%E6%96%87%E6%A1%A3-%E9%98%B6%E6%AE%B51.md) 与 [docs/项目实现文档-阶段2.md](docs/%E9%A1%B9%E7%9B%AE%E5%AE%9E%E7%8E%B0%E6%96%87%E6%A1%A3-%E9%98%B6%E6%AE%B52.md) 的落地实现。
 
+### 日志（阶段 4 补上了配置）
+
+**默认输出单行 JSON**（`LOG_JSON=true`），因为阶段 0 起代码里就有 13 处结构化事件写法
+（`logger.info('{"event":"chat","user":%s,...}', ...)`），JSON 格式能让它们**合并到顶层字段**
+而不是被转义成一个字符串——这样才能用 `jq` 直接筛。
+
+```bash
+# 按事件类型筛
+jq -c 'select(.event=="chat")' app.log
+jq -c 'select(.event=="query_rewrite")' app.log
+
+# 统计问答成本与缓存收益
+jq -r 'select(.event=="chat") | [.cache_hit, .cost_yuan, (.saved_cost_yuan // 0)] | @tsv' app.log \
+  | awk '{n++; if($1=="true") hit++; cost+=$2; saved+=$3}
+         END {printf "问答 %d 次｜命中 %d 次｜花费 %.6f 元｜省下 %.6f 元\n", n, hit, cost, saved}'
+
+# 只看错误
+jq -c 'select(.level=="ERROR" or .level=="WARNING")' app.log
+```
+
+**真实存在的事件类型**：`startup`（启动横幅，含各开关状态）、`chat`（每次问答）、
+`query_rewrite`（多轮追问改写）、`parse_done`（worker 解析完成）、`cache_stale`（缓存引用失效）。
+
+配置项：
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `LOG_LEVEL` | `INFO` | `DEBUG` 会把 SQLAlchemy 的 SQL 也打出来（很吵，排障时才用） |
+| `LOG_JSON` | `true` | `false` 则输出人类可读文本格式 |
+
+> ⚠️ **web 与 worker 是两个进程，日志各自输出**。
+> 排查异步任务时要看 worker 的日志（`arq app.worker.WorkerSettings` 那个终端），
+> 而不是 web 的。
+
 ### 文档导航
 
 | 阶段 | 文档 | 状态 |
@@ -13,8 +47,11 @@
 | 2 | [项目实现文档-阶段2.md](docs/项目实现文档-阶段2.md) | ✅ 已完成 |
 | 3 | [项目实现文档-阶段3.md](docs/项目实现文档-阶段3.md) | ✅ 已完成 |
 | 3 | [阶段3-验收报告.md](docs/阶段3-验收报告.md) | ✅ 已验收（三项修复已补回归测试） |
-| **4** | [项目实现文档-阶段4.md](docs/项目实现文档-阶段4.md) | ✅ **文档已定稿**（1194 行）；代码待实现：向量 + 混合检索 + RRF + rerank + 查询改写 |
+| **4** | [项目实现文档-阶段4.md](docs/项目实现文档-阶段4.md) | ✅ 已完成：向量 + 混合检索 + RRF + rerank + 查询改写 |
+| **4** | [阶段4-验收报告.md](docs/阶段4-验收报告.md) | ✅ 已验收（13/13 通过；发现并修复 4 个问题） |
 | 前置 | [阶段4前置-Embedding选型验证.md](docs/阶段4前置-Embedding选型验证.md) | ✅ 方案已定并实测 |
+| **5** | [项目实现文档-阶段5.md](docs/项目实现文档-阶段5.md) | 📝 **文档已定稿**：Agent / 工具调用（原生 Function Calling 自写循环） |
+| **6** | [项目实现文档-阶段6.md](docs/项目实现文档-阶段6.md) | ✅ 已完成：评估体系（自写 judge + 规则指标）+ Langfuse 可观测（基线表见下） |
 | 环境 | [PostgreSQL-本地环境.md](docs/PostgreSQL-本地环境.md) | ✅ PG 16.15 + pgvector 0.8.7 |
 
 目标不是"好用"，而是**链路完整**：切分 → 入库 → 检索 → 拼 prompt → 调模型 → 返回带出处。后面每个阶段只替换其中一环。
@@ -327,3 +364,27 @@ DeepSeek 流式的 token 统计在尾 chunk，`_parse({"usage":..., "choices":[]
 | 7 Java 接入 | 独立 Spring Boot 工程 HTTP 调本服务 | 否 |
 
 **如果阶段 4 发现要推倒重来，就是阶段 0 的分层没做对。**
+
+---
+
+## 阶段 6 落地：评估体系 + 可观测性
+
+对应 [docs/项目实现文档-阶段6.md](docs/项目实现文档-阶段6.md)。阶段 5（Agent）按约定暂不做。
+
+### 基线表（★ 真实 embedder + 真实 DeepSeek judge + 真实 PG，24 条手标用例）
+
+| 配置 | hit@5 | mrr | faithfulness | completeness | 拒答准确率 | 成本 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 纯关键词（阶段 3 行为） | 0.75 | 0.75 | — | — | — | 0 |
+| 混合检索（当前） | **1.0** | 0.95 | 1.0 | 0.925 | 1.0 | ≈0.052 元 / 24 条 |
+| 混合 + rerank | 1.0 | **0.975** | — | — | — | 0 |
+
+- **向量检索把 hit@5 从 0.75 → 1.0**：4 条"同义改写"用例全靠向量救回（纯关键词全部 miss）。
+- **rerank 只提升 MRR（0.95 → 0.975）而 hit@5 早已饱和**——这正是阶段 4"只看 hit@k 得出 +0%"看不到的那部分，也是本阶段引入 MRR 的意义。
+- 复现：`.venv/bin/python scripts/eval_qa.py --mode keyword --no-judge` / `--mode hybrid`；rerank 对比加 `RERANK_ENABLED=true`。原始结果见 `app/evals/baseline_hybrid.json`。
+
+### 关键取舍
+
+- **自写 LLM judge + 强制自检**：DeepEval 忠实度指标在同一组已知坏答案上只判对 1/4（§1）——未经验证的尺子比没有尺子更危险。每次评测前 `validate_judge()` 用 1 好 3 坏自检，不过则结果标 `judge_validated=false` 并非零退出。
+- **Langfuse 是旁路增强，非硬依赖**：`LANGFUSE_ENABLED=false`（默认）时 `trace_span` 全链路 no-op、不联网、不改行为；`flush()` 在 web 与 worker 的 shutdown 里都调（否则最后的 trace 丢失）。
+- 全量：`.venv/bin/python -m pytest -q` → **213 passed / 2 deselected**（2 个 `real` 需真实 Key）。

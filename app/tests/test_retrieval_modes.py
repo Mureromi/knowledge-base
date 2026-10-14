@@ -19,7 +19,9 @@ class _RaisingEmbedder:
         raise RuntimeError("向量模型挂了")
 
 
-def test_resolve_mode_with_rerank():
+def test_resolve_mode_with_rerank(monkeypatch):
+    """★ 显式打开 rerank：默认值是 False（§15.6 实测决策），依赖默认值会让测试变脆。"""
+    monkeypatch.setattr(settings, "rerank_enabled", True)
     assert resolve_retrieval_mode(FakeEmbedder(), FakeReranker()) == "hybrid+rerank"
 
 
@@ -52,8 +54,14 @@ async def test_embedding_disabled_skips_vector_and_is_keyword(
 
 
 @pytest.mark.asyncio
-async def test_endpoint_reports_hybrid_rerank(client, auth_headers):
-    """默认配置（embedding + rerank 开）→ 接口 retrieval_mode = hybrid+rerank。"""
+async def test_endpoint_reports_hybrid_rerank(client, auth_headers, monkeypatch):
+    """显式打开 rerank → 接口 retrieval_mode = hybrid+rerank。
+
+    ★ 这里必须显式 monkeypatch：rerank 的**默认值是 False**（依据 §15.6 的自有语料实测，
+      Top-1 +6% / Top-5 +0%，不值得常驻 801MB）。原先这条测试依赖"默认开启"，
+      改默认值后它会误红——这类"依赖默认配置"的测试是脆弱的，改成显式声明意图。
+    """
+    monkeypatch.setattr(settings, "rerank_enabled", True)
     r = await client.post(
         "/api/v1/chat/sync", json={"question": "随便问一个没有的问题"}, headers=auth_headers
     )
@@ -83,3 +91,21 @@ async def test_vector_failure_degrades_to_keyword(db_session, seed_document):
         embedder=_RaisingEmbedder(), reranker=None,
     )
     assert len(results) == 1, "向量路崩了，关键词路仍命中"
+
+
+@pytest.mark.asyncio
+async def test_endpoint_reports_hybrid_by_default(client, auth_headers):
+    """★ 默认配置（embedding 开、rerank 关）→ 接口 retrieval_mode = hybrid。
+
+    这条守住 §15.6 的决策：默认不加载 reranker（省 801MB RSS），
+    且接口必须**如实报告**实际生效的检索方式，不能谎报 hybrid+rerank。
+    """
+    assert settings.rerank_enabled is False, (
+        "rerank 默认值被改回 True 了？若是有意为之（语料变大后复测通过），"
+        "请同时更新本条测试与 docs/项目实现文档-阶段4.md §15.6 的结论。"
+    )
+    r = await client.post(
+        "/api/v1/chat/sync", json={"question": "随便问一个没有的问题"}, headers=auth_headers
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["retrieval_mode"] == "hybrid"

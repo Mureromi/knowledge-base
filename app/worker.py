@@ -21,9 +21,11 @@ import arq
 from arq import cron
 from arq.connections import RedisSettings
 
+from app.clients import tracing
 from app.clients.cache import shutdown_cache, startup_cache
 from app.clients.embedding import embed_documents_if_ready, embedding_client
 from app.core.config import settings
+from app.core.logging import log_startup_banner, setup_logging
 from app.crud import document as doc_crud
 from app.crud import processing_task as task_crud
 from app.db.session import SessionLocal, init_models
@@ -192,6 +194,11 @@ async def cleanup_stale_tasks(ctx: dict[str, Any]) -> int:
 
 
 async def startup(ctx: dict[str, Any]) -> None:
+    # ★ worker 是独立进程，不经过 web 的 lifespan —— 必须自己配一次日志，
+    #   否则 worker 侧所有 logger.info 都不会输出（排查异步任务时两眼一抹黑）。
+    setup_logging(force=True)
+    log_startup_banner("worker")
+
     await init_models()          # 开发期方便；生产应改为 alembic upgrade
     await startup_cache()        # worker 侧若将来要写缓存也需要它
     # ★ 阶段 4：worker 只需 embedder（把切片向量化入库），不需要 reranker（那是查询时的事）。
@@ -201,11 +208,16 @@ async def startup(ctx: dict[str, Any]) -> None:
             embedding_client.startup()
         except Exception as exc:                        # noqa: BLE001
             logger.warning("worker embedding 模型加载失败（新切片将无向量，仅靠关键词）: %s", exc)
+    # ★ 阶段 6：worker 当前不产生问答 trace，但 startup/shutdown 成对接好：
+    #   将来任何在 worker 里跑的 trace（如异步评测）都能直接上报且不丢（§3.3）。
+    tracing.startup()
     ctx["started_at"] = datetime.now(UTC)
     logger.info("worker 已启动")
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
+    # ★ 必须 flush：worker 长期运行、退出时才批量上报，漏了整个 worker 的 trace 全丢（§3.3）
+    tracing.shutdown()
     await shutdown_cache()
     logger.info("worker 已退出")
 
